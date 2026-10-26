@@ -153,6 +153,48 @@
         </where>
         limit #{page.queryLimit}
     </select>
+    <sql id="selectArticleIdsWithFollowedTags">
+        select
+        DISTINCT(A.id) articleId, A.created_at
+        from
+        articles A
+        join article_tags AT on A.id = AT.article_id
+        join tag_follows TF on TF.tag_id = AT.tag_id
+    </sql>
+    <select id="findArticlesWithFollowedTags" resultMap="articleId">
+        <include refid="selectArticleIdsWithFollowedTags"/>
+        where TF.user_id = #{userId}
+        order by A.created_at desc
+        limit #{page.offset}, #{page.limit}
+    </select>
+    <select id="countArticlesWithFollowedTags" resultType="java.lang.Integer">
+        select
+        count(DISTINCT A.id)
+        from
+        articles A
+        join article_tags AT on A.id = AT.article_id
+        join tag_follows TF on TF.tag_id = AT.tag_id
+        where TF.user_id = #{userId}
+    </select>
+    <select id="findArticlesWithFollowedTagsWithCursor" resultMap="articleId">
+        <include refid="selectArticleIdsWithFollowedTags"/>
+        <where>
+            TF.user_id = #{userId}
+            <if test='page.cursor != null and page.direction.name() == "NEXT"'>
+                AND A.created_at &lt; #{page.cursor}
+            </if>
+            <if test='page.cursor != null and page.direction.name() == "PREV"'>
+                AND A.created_at > #{page.cursor}
+            </if>
+        </where>
+        <if test='page.direction.name() == "NEXT"'>
+            order by A.created_at desc
+        </if>
+        <if test='page.direction.name() == "PREV"'>
+            order by A.created_at asc
+        </if>
+        limit #{page.queryLimit}
+    </select>
 
     <resultMap id="articleId" type="string">
         <id javaType="string" column="articleId"/>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="io.spring.infrastructure.mybatis.mapper.TagFollowMapper">
+    <insert id="insert">
+        insert or ignore into tag_follows (user_id, tag_id) values (#{tagFollow.userId}, #{tagFollow.tagId})
+    </insert>
+    <delete id="delete">
+        delete from tag_follows where user_id = #{tagFollow.userId} and tag_id = #{tagFollow.tagId}
+    </delete>
+    <select id="find" resultMap="tagFollow">
+        select
+          TF.user_id tagFollowUserId,
+          TF.tag_id tagFollowTagId
+          from tag_follows TF
+          where TF.user_id = #{userId} and TF.tag_id = #{tagId}
+    </select>
+    <resultMap id="tagFollow" type="io.spring.core.tagfollow.TagFollow">
+        <result column="tagFollowUserId" property="userId"/>
+        <result column="tagFollowTagId" property="tagId"/>
+    </resultMap>
+</mapper>
