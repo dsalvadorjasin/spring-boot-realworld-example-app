@@ -72,4 +72,26 @@ public class ListArticleApiTest extends TestWithCurrentUser {
         .then()
         .statusCode(200);
   }
+
+  @Test
+  public void should_get_bookmarks_401_without_login() throws Exception {
+    RestAssuredMockMvc.when().get("/articles/bookmarked").prettyPeek().then().statusCode(401);
+  }
+
+  @Test
+  public void should_get_bookmarks_success() throws Exception {
+    ArticleDataList articleDataList = new ArticleDataList(asList(articleDataFixture("1", user)), 1);
+    when(articleQueryService.findUserBookmarks(eq(user), eq(new Page(0, 20))))
+        .thenReturn(articleDataList);
+
+    given()
+        .header("Authorization", "Token " + token)
+        .when()
+        .get("/articles/bookmarked")
+        .prettyPeek()
+        .then()
+        .statusCode(200)
+        .body("articlesCount", org.hamcrest.Matchers.equalTo(1))
+        .body("articles[0].slug", org.hamcrest.Matchers.equalTo("title-1"));
+  }
 }
