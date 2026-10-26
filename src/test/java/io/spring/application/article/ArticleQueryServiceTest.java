@@ -10,12 +10,15 @@ import io.spring.application.data.ArticleData;
 import io.spring.application.data.ArticleDataList;
 import io.spring.core.article.Article;
 import io.spring.core.article.ArticleRepository;
+import io.spring.core.bookmark.ArticleBookmark;
+import io.spring.core.bookmark.ArticleBookmarkRepository;
 import io.spring.core.favorite.ArticleFavorite;
 import io.spring.core.favorite.ArticleFavoriteRepository;
 import io.spring.core.user.FollowRelation;
 import io.spring.core.user.User;
 import io.spring.core.user.UserRepository;
 import io.spring.infrastructure.DbTestBase;
+import io.spring.infrastructure.repository.MyBatisArticleBookmarkRepository;
 import io.spring.infrastructure.repository.MyBatisArticleFavoriteRepository;
 import io.spring.infrastructure.repository.MyBatisArticleRepository;
 import io.spring.infrastructure.repository.MyBatisUserRepository;
@@ -32,7 +35,8 @@ import org.springframework.context.annotation.Import;
   ArticleQueryService.class,
   MyBatisUserRepository.class,
   MyBatisArticleRepository.class,
-  MyBatisArticleFavoriteRepository.class
+  MyBatisArticleFavoriteRepository.class,
+  MyBatisArticleBookmarkRepository.class
 })
 public class ArticleQueryServiceTest extends DbTestBase {
   @Autowired private ArticleQueryService queryService;
@@ -42,6 +46,8 @@ public class ArticleQueryServiceTest extends DbTestBase {
   @Autowired private UserRepository userRepository;
 
   @Autowired private ArticleFavoriteRepository articleFavoriteRepository;
+
+  @Autowired private ArticleBookmarkRepository articleBookmarkRepository;
 
   private User user;
   private Article article;
@@ -226,5 +232,63 @@ public class ArticleQueryServiceTest extends DbTestBase {
     Assertions.assertEquals(anotherUserFeed.getCount(), 1);
     ArticleData articleData = anotherUserFeed.getArticleDatas().get(0);
     Assertions.assertTrue(articleData.getProfileData().isFollowing());
+  }
+
+  @Test
+  public void should_mark_article_as_bookmarked_for_current_user_only() {
+    User anotherUser = new User("other@test.com", "other", "123", "", "");
+    userRepository.save(anotherUser);
+    articleBookmarkRepository.save(new ArticleBookmark(article.getId(), anotherUser.getId()));
+
+    Assertions.assertTrue(queryService.findById(article.getId(), anotherUser).get().isBookmarked());
+    Assertions.assertFalse(queryService.findById(article.getId(), user).get().isBookmarked());
+    Assertions.assertFalse(queryService.findById(article.getId(), null).get().isBookmarked());
+
+    ArticleDataList list =
+        queryService.findRecentArticles(null, null, null, new Page(), anotherUser);
+    Assertions.assertTrue(list.getArticleDatas().get(0).isBookmarked());
+  }
+
+  @Test
+  public void should_list_user_bookmarks_most_recent_first() {
+    Article second =
+        new Article("second", "desc", "body", Arrays.asList("test"), user.getId(), new DateTime());
+    Article notBookmarked =
+        new Article("third", "desc", "body", Arrays.asList(), user.getId(), new DateTime());
+    articleRepository.save(second);
+    articleRepository.save(notBookmarked);
+
+    User reader = new User("reader@test.com", "reader", "123", "", "");
+    userRepository.save(reader);
+    DateTime now = new DateTime();
+    articleBookmarkRepository.save(
+        new ArticleBookmark(second.getId(), reader.getId(), now.minusHours(1)));
+    articleBookmarkRepository.save(new ArticleBookmark(article.getId(), reader.getId(), now));
+
+    ArticleDataList bookmarks = queryService.findUserBookmarks(reader, new Page());
+    Assertions.assertEquals(2, bookmarks.getCount());
+    Assertions.assertEquals(2, bookmarks.getArticleDatas().size());
+    Assertions.assertEquals(article.getId(), bookmarks.getArticleDatas().get(0).getId());
+    Assertions.assertEquals(second.getId(), bookmarks.getArticleDatas().get(1).getId());
+    Assertions.assertTrue(bookmarks.getArticleDatas().get(0).isBookmarked());
+
+    ArticleDataList secondPage = queryService.findUserBookmarks(reader, new Page(1, 1));
+    Assertions.assertEquals(2, secondPage.getCount());
+    Assertions.assertEquals(1, secondPage.getArticleDatas().size());
+    Assertions.assertEquals(second.getId(), secondPage.getArticleDatas().get(0).getId());
+
+    ArticleDataList empty = queryService.findUserBookmarks(user, new Page());
+    Assertions.assertEquals(0, empty.getCount());
+    Assertions.assertEquals(0, empty.getArticleDatas().size());
+  }
+
+  @Test
+  public void should_not_list_bookmarks_of_deleted_articles() {
+    articleBookmarkRepository.save(new ArticleBookmark(article.getId(), user.getId()));
+    articleRepository.remove(article);
+
+    ArticleDataList bookmarks = queryService.findUserBookmarks(user, new Page());
+    Assertions.assertEquals(0, bookmarks.getCount());
+    Assertions.assertEquals(0, bookmarks.getArticleDatas().size());
   }
 }
