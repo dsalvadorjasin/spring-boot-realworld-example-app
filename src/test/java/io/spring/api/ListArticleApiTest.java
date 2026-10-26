@@ -3,6 +3,7 @@ package io.spring.api;
 import static io.restassured.module.mockmvc.RestAssuredMockMvc.given;
 import static io.spring.TestHelper.articleDataFixture;
 import static java.util.Arrays.asList;
+import static org.hamcrest.core.IsEqual.equalTo;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -71,5 +72,30 @@ public class ListArticleApiTest extends TestWithCurrentUser {
         .prettyPeek()
         .then()
         .statusCode(200);
+  }
+
+  @Test
+  public void should_get_tag_feed_401_without_login() throws Exception {
+    RestAssuredMockMvc.when().get("/articles/feed/tags").prettyPeek().then().statusCode(401);
+    RestAssuredMockMvc.when().get("/articles/feed/tags/").prettyPeek().then().statusCode(401);
+  }
+
+  @Test
+  public void should_get_tag_feed_success() throws Exception {
+    ArticleDataList articleDataList =
+        new ArticleDataList(
+            asList(articleDataFixture("1", user), articleDataFixture("2", user)), 2);
+    when(articleQueryService.findTagFeed(eq(user), eq(new Page(0, 20))))
+        .thenReturn(articleDataList);
+
+    given()
+        .header("Authorization", "Token " + token)
+        .when()
+        .get("/articles/feed/tags")
+        .prettyPeek()
+        .then()
+        .statusCode(200)
+        .body("articlesCount", equalTo(2))
+        .body("articles.size()", equalTo(2));
   }
 }

@@ -122,6 +122,38 @@ public class ArticleQueryService {
     }
   }
 
+  public ArticleDataList findTagFeed(User user, Page page) {
+    List<String> articleIds = articleReadService.findArticlesWithFollowedTags(user.getId(), page);
+    int count = articleReadService.countArticlesWithFollowedTags(user.getId());
+    if (articleIds.size() == 0) {
+      return new ArticleDataList(new ArrayList<>(), count);
+    } else {
+      List<ArticleData> articles = articleReadService.findArticles(articleIds);
+      fillExtraInfo(articles, user);
+      return new ArticleDataList(articles, count);
+    }
+  }
+
+  public CursorPager<ArticleData> findTagFeedWithCursor(
+      User user, CursorPageParameter<DateTime> page) {
+    List<String> articleIds =
+        articleReadService.findArticlesWithFollowedTagsWithCursor(user.getId(), page);
+    if (articleIds.size() == 0) {
+      return new CursorPager<>(new ArrayList<>(), page.getDirection(), false);
+    } else {
+      boolean hasExtra = articleIds.size() > page.getLimit();
+      if (hasExtra) {
+        articleIds.remove(page.getLimit());
+      }
+      if (!page.isNext()) {
+        Collections.reverse(articleIds);
+      }
+      List<ArticleData> articles = articleReadService.findArticles(articleIds);
+      fillExtraInfo(articles, user);
+      return new CursorPager<>(articles, page.getDirection(), hasExtra);
+    }
+  }
+
   private void fillExtraInfo(List<ArticleData> articles, User currentUser) {
     setFavoriteCount(articles);
     if (currentUser != null) {

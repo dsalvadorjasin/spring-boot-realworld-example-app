@@ -23,6 +23,7 @@ import io.spring.graphql.DgsConstants.ARTICLEPAYLOAD;
 import io.spring.graphql.DgsConstants.COMMENT;
 import io.spring.graphql.DgsConstants.PROFILE;
 import io.spring.graphql.DgsConstants.QUERY;
+import io.spring.graphql.exception.AuthenticationException;
 import io.spring.graphql.types.Article;
 import io.spring.graphql.types.ArticleEdge;
 import io.spring.graphql.types.ArticlesConnection;
@@ -61,6 +62,52 @@ public class ArticleDatafetcher {
     } else {
       articles =
           articleQueryService.findUserFeedWithCursor(
+              current,
+              new CursorPageParameter<>(DateTimeCursor.parse(before), last, Direction.PREV));
+    }
+    graphql.relay.PageInfo pageInfo = buildArticlePageInfo(articles);
+    ArticlesConnection articlesConnection =
+        ArticlesConnection.newBuilder()
+            .pageInfo(pageInfo)
+            .edges(
+                articles.getData().stream()
+                    .map(
+                        a ->
+                            ArticleEdge.newBuilder()
+                                .cursor(a.getCursor().toString())
+                                .node(buildArticleResult(a))
+                                .build())
+                    .collect(Collectors.toList()))
+            .build();
+    return DataFetcherResult.<ArticlesConnection>newResult()
+        .data(articlesConnection)
+        .localContext(
+            articles.getData().stream().collect(Collectors.toMap(ArticleData::getSlug, a -> a)))
+        .build();
+  }
+
+  @DgsQuery(field = QUERY.TagFeed)
+  public DataFetcherResult<ArticlesConnection> getTagFeed(
+      @InputArgument("first") Integer first,
+      @InputArgument("after") String after,
+      @InputArgument("last") Integer last,
+      @InputArgument("before") String before,
+      DgsDataFetchingEnvironment dfe) {
+    if (first == null && last == null) {
+      throw new IllegalArgumentException("first 和 last 必须只存在一个");
+    }
+
+    User current = SecurityUtil.getCurrentUser().orElseThrow(AuthenticationException::new);
+
+    CursorPager<ArticleData> articles;
+    if (first != null) {
+      articles =
+          articleQueryService.findTagFeedWithCursor(
+              current,
+              new CursorPageParameter<>(DateTimeCursor.parse(after), first, Direction.NEXT));
+    } else {
+      articles =
+          articleQueryService.findTagFeedWithCursor(
               current,
               new CursorPageParameter<>(DateTimeCursor.parse(before), last, Direction.PREV));
     }

@@ -63,4 +63,13 @@ public class MyBatisArticleRepositoryTest extends DbTestBase {
     articleRepository.remove(article);
     Assertions.assertFalse(articleRepository.findById(article.getId()).isPresent());
   }
+
+  @Test
+  public void should_find_tag_by_name() {
+    articleRepository.save(article);
+    Optional<Tag> tag = articleRepository.findTagByName("java");
+    Assertions.assertTrue(tag.isPresent());
+    Assertions.assertEquals("java", tag.get().getName());
+    Assertions.assertFalse(articleRepository.findTagByName("notag").isPresent());
+  }
 }

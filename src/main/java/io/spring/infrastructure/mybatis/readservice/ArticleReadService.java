@@ -39,4 +39,12 @@ public interface ArticleReadService {
       @Param("author") String author,
       @Param("favoritedBy") String favoritedBy,
       @Param("page") CursorPageParameter page);
+
+  List<String> findArticlesWithFollowedTags(
+      @Param("userId") String userId, @Param("page") Page page);
+
+  int countArticlesWithFollowedTags(@Param("userId") String userId);
+
+  List<String> findArticlesWithFollowedTagsWithCursor(
+      @Param("userId") String userId, @Param("page") CursorPageParameter page);
 }

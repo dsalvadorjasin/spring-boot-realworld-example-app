@@ -12,12 +12,15 @@ import io.spring.core.article.Article;
 import io.spring.core.article.ArticleRepository;
 import io.spring.core.favorite.ArticleFavorite;
 import io.spring.core.favorite.ArticleFavoriteRepository;
+import io.spring.core.tagfollow.TagFollow;
+import io.spring.core.tagfollow.TagFollowRepository;
 import io.spring.core.user.FollowRelation;
 import io.spring.core.user.User;
 import io.spring.core.user.UserRepository;
 import io.spring.infrastructure.DbTestBase;
 import io.spring.infrastructure.repository.MyBatisArticleFavoriteRepository;
 import io.spring.infrastructure.repository.MyBatisArticleRepository;
+import io.spring.infrastructure.repository.MyBatisTagFollowRepository;
 import io.spring.infrastructure.repository.MyBatisUserRepository;
 import java.util.Arrays;
 import java.util.Optional;
@@ -32,7 +35,8 @@ import org.springframework.context.annotation.Import;
   ArticleQueryService.class,
   MyBatisUserRepository.class,
   MyBatisArticleRepository.class,
-  MyBatisArticleFavoriteRepository.class
+  MyBatisArticleFavoriteRepository.class,
+  MyBatisTagFollowRepository.class
 })
 public class ArticleQueryServiceTest extends DbTestBase {
   @Autowired private ArticleQueryService queryService;
@@ -42,6 +46,8 @@ public class ArticleQueryServiceTest extends DbTestBase {
   @Autowired private UserRepository userRepository;
 
   @Autowired private ArticleFavoriteRepository articleFavoriteRepository;
+
+  @Autowired private TagFollowRepository tagFollowRepository;
 
   private User user;
   private Article article;
@@ -226,5 +232,100 @@ public class ArticleQueryServiceTest extends DbTestBase {
     Assertions.assertEquals(anotherUserFeed.getCount(), 1);
     ArticleData articleData = anotherUserFeed.getArticleDatas().get(0);
     Assertions.assertTrue(articleData.getProfileData().isFollowing());
+  }
+
+  private void followTag(User follower, String tagName) {
+    tagFollowRepository.save(
+        new TagFollow(follower.getId(), articleRepository.findTagByName(tagName).get().getId()));
+  }
+
+  @Test
+  public void should_get_tag_feed() {
+    User follower = new User("follower@email.com", "follower", "123", "", "");
+    userRepository.save(follower);
+
+    Article olderJavaArticle =
+        new Article(
+            "older java",
+            "desc",
+            "body",
+            Arrays.asList("java"),
+            user.getId(),
+            new DateTime().minusHours(1));
+    articleRepository.save(olderJavaArticle);
+    Article otherArticle =
+        new Article("other", "desc", "body", Arrays.asList("other"), user.getId());
+    articleRepository.save(otherArticle);
+
+    ArticleDataList emptyFeed = queryService.findTagFeed(follower, new Page());
+    Assertions.assertEquals(0, emptyFeed.getCount());
+    Assertions.assertEquals(0, emptyFeed.getArticleDatas().size());
+
+    followTag(follower, "java");
+    followTag(follower, "spring");
+
+    ArticleDataList feed = queryService.findTagFeed(follower, new Page());
+    Assertions.assertEquals(2, feed.getCount());
+    Assertions.assertEquals(2, feed.getArticleDatas().size());
+    Assertions.assertEquals(article.getId(), feed.getArticleDatas().get(0).getId());
+    Assertions.assertEquals(olderJavaArticle.getId(), feed.getArticleDatas().get(1).getId());
+    Assertions.assertTrue(feed.getArticleDatas().get(0).getTagList().contains("spring"));
+
+    ArticleDataList secondPage = queryService.findTagFeed(follower, new Page(1, 1));
+    Assertions.assertEquals(2, secondPage.getCount());
+    Assertions.assertEquals(1, secondPage.getArticleDatas().size());
+    Assertions.assertEquals(olderJavaArticle.getId(), secondPage.getArticleDatas().get(0).getId());
+
+    Assertions.assertEquals(0, queryService.findTagFeed(user, new Page()).getCount());
+
+    tagFollowRepository.remove(
+        new TagFollow(follower.getId(), articleRepository.findTagByName("java").get().getId()));
+    ArticleDataList afterUnfollow = queryService.findTagFeed(follower, new Page());
+    Assertions.assertEquals(1, afterUnfollow.getCount());
+    Assertions.assertEquals(article.getId(), afterUnfollow.getArticleDatas().get(0).getId());
+  }
+
+  @Test
+  public void should_get_tag_feed_by_cursor() {
+    User follower = new User("follower@email.com", "follower", "123", "", "");
+    userRepository.save(follower);
+    Article olderJavaArticle =
+        new Article(
+            "older java",
+            "desc",
+            "body",
+            Arrays.asList("java"),
+            user.getId(),
+            new DateTime().minusHours(1));
+    articleRepository.save(olderJavaArticle);
+
+    CursorPager<ArticleData> empty =
+        queryService.findTagFeedWithCursor(
+            follower, new CursorPageParameter<>(null, 20, Direction.NEXT));
+    Assertions.assertEquals(0, empty.getData().size());
+
+    followTag(follower, "java");
+    followTag(follower, "spring");
+
+    CursorPager<ArticleData> firstPage =
+        queryService.findTagFeedWithCursor(
+            follower, new CursorPageParameter<>(null, 1, Direction.NEXT));
+    Assertions.assertEquals(1, firstPage.getData().size());
+    Assertions.assertEquals(article.getId(), firstPage.getData().get(0).getId());
+    Assertions.assertTrue(firstPage.hasNext());
+
+    CursorPager<ArticleData> secondPage =
+        queryService.findTagFeedWithCursor(
+            follower,
+            new CursorPageParameter<>(
+                DateTimeCursor.parse(firstPage.getEndCursor().toString()), 1, Direction.NEXT));
+    Assertions.assertEquals(1, secondPage.getData().size());
+    Assertions.assertEquals(olderJavaArticle.getId(), secondPage.getData().get(0).getId());
+    Assertions.assertFalse(secondPage.hasNext());
+
+    CursorPager<ArticleData> all =
+        queryService.findTagFeedWithCursor(
+            follower, new CursorPageParameter<>(null, 20, Direction.PREV));
+    Assertions.assertEquals(2, all.getData().size());
   }
 }
